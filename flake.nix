@@ -12,112 +12,31 @@
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems f;
-
-      # Build a NixOS system configuration for a given architecture.
-      # Used for both the QCOW2 image and the dev VM.
-      mkSystem = system: nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [ ./configuration.nix ];
-      };
-
-      # System configs per architecture
-      systems = nixpkgs.lib.genAttrs supportedSystems mkSystem;
     in
     {
-      # ── Reusable NixOS module ──────────────────────────────────────
-      # Import this into your own configuration.nix:
+      # ── Reusable NixOS modules ─────────────────────────────────
       #
+      # openkrill — k3s service module
       #   { inputs, ... }: {
       #     imports = [ inputs.openkrill.nixosModules.openkrill ];
       #     services.openkrill.enable = true;
       #   }
+      #
+      # cluster — app module framework (cert-manager, argocd, etc.)
+      #   { inputs, ... }: {
+      #     imports = [ inputs.openkrill.nixosModules.cluster ];
+      #     cluster.domain = "mycompany.com";
+      #     cluster.apps.cert-manager.enable = true;
+      #   }
+      #
+      # See examples/ for complete usage patterns.
       nixosModules.openkrill = import ./modules/openkrill.nix;
       nixosModules.cluster = import ./modules/cluster {
         inherit nix-kube-generators nixhelm;
       };
       nixosModules.default = self.nixosModules.openkrill;
 
-      # ── NixOS configurations ──────────────────────────────────────
-      nixosConfigurations = {
-        openkrill-x86_64  = systems.x86_64-linux;
-        openkrill-aarch64 = systems.aarch64-linux;
-      };
-
-      # ── Packages ──────────────────────────────────────────────────
-      packages = forAllSystems (system:
-        let
-          # Helper: build an image variant by layering extra modules
-          # on top of configuration.nix.
-          mkImage = extraModules: (nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [ ./configuration.nix ] ++ extraModules;
-          }).config.system.build.image;
-
-          # Dev VM runner -- run with: nix run .#vm
-          nixos-vm = nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              ./configuration.nix
-              ./vm.nix
-            ];
-          };
-        in
-        {
-          # Standalone QCOW2 -- for libvirt, Incus, Proxmox, plain QEMU
-          qcow2 = mkImage [
-            "${nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-            {
-              image.baseName = "openkrill";
-              image.format = "qcow2";
-              image.efiSupport = false;
-              virtualisation.diskSize = 20480; # 20GB
-            }
-          ];
-
-          # DigitalOcean -- compressed QCOW2 for DO custom images
-          digitalocean = mkImage [
-            "${nixpkgs}/nixos/modules/virtualisation/digital-ocean-image.nix"
-            {
-              image.baseName = "openkrill-digitalocean";
-              virtualisation.diskSize = 4096; # 4GB, auto-grows on DO
-            }
-          ];
-
-          # Google Compute Engine -- raw disk tarball for GCE custom images
-          google-compute = mkImage [
-            "${nixpkgs}/nixos/modules/virtualisation/google-compute-image.nix"
-            {
-              image.baseName = "openkrill-google-compute";
-              virtualisation.diskSize = 4096; # 4GB, auto-grows on GCE
-            }
-          ];
-
-          # Incus VM -- QCOW2 with guest agent, EFI, virtio, serial console
-          # Uses system.build.qemuImage (not system.build.image, which is
-          # the LXC metadata tarball in this module stack).
-          incus-vm = (nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              ./configuration.nix
-              "${nixpkgs}/nixos/modules/virtualisation/incus-virtual-machine.nix"
-            ];
-          }).config.system.build.qemuImage;
-
-          # Bootable live ISO -- boots k3s directly from USB/CD.
-          # Includes nixos-install so the user can install to disk.
-          iso = mkImage [
-            "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
-            { image.baseName = nixpkgs.lib.mkForce "openkrill"; }
-          ];
-
-          # Dev VM runner
-          vm = nixos-vm.config.system.build.vm;
-
-          default = self.packages.${system}.qcow2;
-        }
-      );
-
-      # ── Checks (nix flake check) ─────────────────────────────────
+      # ── Checks (nix flake check) ──────────────────────────────
       checks = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };
@@ -130,7 +49,7 @@
         }
       );
 
-      # ── Dev shells ────────────────────────────────────────────────
+      # ── Dev shells ─────────────────────────────────────────────
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs { inherit system; };

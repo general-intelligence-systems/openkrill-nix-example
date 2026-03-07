@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-[[ $# -eq 1 ]] || { echo "Usage: install-to-usb /dev/sdX" >&2; exit 1; }
-nix build .#iso
-sudo dd if=result/iso/openkrill.iso of="$1" bs=4M status=progress conv=fsync
