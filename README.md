@@ -1,6 +1,6 @@
 # openkrill-nix-example
 
-> [!WARNING]
+> [!CAUTION]
 > This repository is under active development and is not guaranteed to work.
 
 > [!NOTE]
