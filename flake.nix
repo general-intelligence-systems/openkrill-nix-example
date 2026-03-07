@@ -1,9 +1,14 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nix-kube-generators.url = "github:farcaller/nix-kube-generators";
+    nixhelm = {
+      url = "github:n-at-han-k/nixhelm";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, nix-kube-generators, nixhelm, ... }:
     let
       supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems f;
@@ -27,6 +32,9 @@
       #     services.openkrill.enable = true;
       #   }
       nixosModules.openkrill = import ./modules/openkrill.nix;
+      nixosModules.cluster = import ./modules/cluster {
+        inherit nix-kube-generators nixhelm;
+      };
       nixosModules.default = self.nixosModules.openkrill;
 
       # ── NixOS configurations ──────────────────────────────────────
