@@ -15,6 +15,27 @@
   outputs = { self, nixpkgs, openkrill, ... }:
     let
       system = "x86_64-linux";
+
+      baseSystem = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          openkrill.nixosModules.openkrill
+          ({ lib, ... }: {
+            services.openkrill.enable = true;
+            networking.hostName = "k3s-minimal";
+            fileSystems."/" = lib.mkOverride 1500 {
+              device = "/dev/vda1";
+              fsType = "ext4";
+            };
+            system.stateVersion = "25.11";
+          })
+        ];
+      };
+
+      images = openkrill.lib.buildImages {
+        inherit nixpkgs;
+        system = baseSystem;
+      };
     in
     {
       nixosConfigurations.default = nixpkgs.lib.nixosSystem {
@@ -23,36 +44,18 @@
           openkrill.nixosModules.openkrill
           {
             services.openkrill.enable = true;
-
-            # Networking
             networking.hostName = "k3s-minimal";
-
-            # Disk & boot (adjust for your target hardware)
             fileSystems."/" = { device = "/dev/sda1"; fsType = "ext4"; };
             boot.loader.grub.device = "/dev/sda";
-
             system.stateVersion = "25.11";
           }
         ];
       };
 
-      # Build a QCOW2 disk image
-      packages.${system}.qcow2 = (nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [
-          openkrill.nixosModules.openkrill
-          "${nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-          {
-            services.openkrill.enable = true;
-            networking.hostName = "k3s-minimal";
-            image.baseName = "k3s-minimal";
-            image.format = "qcow2";
-            virtualisation.diskSize = 20480;
-            system.stateVersion = "25.11";
-          }
-        ];
-      }).config.system.build.image;
-
-      packages.${system}.default = self.packages.${system}.qcow2;
+      packages.${system} = {
+        qcow2   = images.qcow2.image;
+        vm      = images.vm.image;
+        default = images.qcow2.image;
+      };
     };
 }

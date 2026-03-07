@@ -6,6 +6,7 @@
 #
 # Build: nix build .#qcow2
 # ISO:   nix build .#iso
+# VM:    nix run .#vm
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
@@ -16,7 +17,7 @@
     let
       system = "x86_64-linux";
 
-      clusterConfig = {
+      clusterConfig = { lib, ... }: {
         imports = [
           openkrill.nixosModules.openkrill
           openkrill.nixosModules.cluster
@@ -30,41 +31,27 @@
         cluster.manifestsDir = "/var/lib/rancher/k3s/server/manifests";
 
         # ── TLS: cert-manager + trust-manager ───────────────────────
-        # cert-manager handles certificate issuance (Let's Encrypt, etc.)
-        # trust-manager distributes CA bundles across the cluster
         cluster.apps.cert-manager.enable = true;
         cluster.apps.trust-manager = {
           enable = true;
-          caSecretName = "cluster-ca";  # K8s Secret containing your CA cert
+          caSecretName = "cluster-ca";
         };
 
         # ── GitOps: ArgoCD ──────────────────────────────────────────
-        # Watches a git repo and deploys manifests automatically.
         cluster.apps.argocd = {
           enable = true;
           domain = "argocd.example.com";
-          caCertFile = ./ca.pem;        # path to your CA certificate
+          caCertFile = ./ca.pem;
           oidc.issuer = "https://auth.example.com";
-          # trustedDomains = [ "git.example.com" ];
-          # values = {};  # Helm value overrides
         };
 
         # ── Database: CloudNativePG ─────────────────────────────────
-        # PostgreSQL operator — define databases declaratively.
         cluster.apps.cloudnative-pg.enable = true;
-        # cluster.apps.cloudnative-pg.databases.myapp = {
-        #   namespace = "myapp";
-        #   instances = 2;
-        #   storageSize = "10Gi";
-        # };
 
         # ── Web IDE: Theia ──────────────────────────────────────────
         cluster.apps.theia-ide.enable = true;
 
         # ── SSO: Authelia ───────────────────────────────────────────
-        # Single sign-on portal + OIDC provider for all services.
-        # Requires LLDAP as the user directory backend.
-        #
         # cluster.apps.authelia = {
         #   enable = true;
         #   ldapBaseDn = "dc=example,dc=com";
@@ -78,9 +65,6 @@
         # };
 
         # ── File Storage: OpenCloud ─────────────────────────────────
-        # File sync & collaboration with Collabora, Tika search, and
-        # S3 storage backend.
-        #
         # cluster.apps.opencloud = {
         #   enable = true;
         #   domain = "cloud.example.com";
@@ -92,7 +76,23 @@
         #   };
         # };
 
+        # Fallback root filesystem — image modules override this.
+        fileSystems."/" = lib.mkOverride 1500 {
+          device = "/dev/vda1";
+          fsType = "ext4";
+        };
+
         system.stateVersion = "25.11";
+      };
+
+      baseSystem = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [ clusterConfig ];
+      };
+
+      images = openkrill.lib.buildImages {
+        inherit nixpkgs;
+        system = baseSystem;
       };
     in
     {
@@ -108,31 +108,10 @@
       };
 
       packages.${system} = {
-        # QCOW2 disk image — for libvirt, Proxmox, plain QEMU
-        qcow2 = (nixpkgs.lib.nixosSystem {
-          inherit system;
-          modules = [
-            clusterConfig
-            "${nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-            {
-              image.baseName = "openkrill-prod";
-              image.format = "qcow2";
-              virtualisation.diskSize = 20480;
-            }
-          ];
-        }).config.system.build.image;
-
-        # Bootable ISO — flash to USB with: dd if=result/openkrill.iso of=/dev/sdX
-        iso = (nixpkgs.lib.nixosSystem {
-          inherit system;
-          modules = [
-            clusterConfig
-            "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
-            { image.baseName = nixpkgs.lib.mkForce "openkrill"; }
-          ];
-        }).config.system.build.image;
-
-        default = self.packages.${system}.qcow2;
+        qcow2   = images.qcow2.image;
+        iso      = images.iso.image;
+        vm       = images.vm.image;
+        default  = images.qcow2.image;
       };
     };
 }

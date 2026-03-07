@@ -4,6 +4,7 @@
 # on boot via manifest symlinks to the k3s auto-deploy directory.
 #
 # Build: nix build .#qcow2
+# VM:    nix run .#vm
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
@@ -15,7 +16,7 @@
       system = "x86_64-linux";
 
       # Shared NixOS configuration
-      clusterConfig = {
+      clusterConfig = { lib, ... }: {
         imports = [
           openkrill.nixosModules.openkrill
           openkrill.nixosModules.cluster
@@ -26,24 +27,34 @@
 
         # ── Cluster config ──────────────────────────────────────────
         cluster.domain = "example.com";
-
-        # Write manifests to k3s auto-deploy directory — k3s applies
-        # them automatically on boot and watches for changes.
         cluster.manifestsDir = "/var/lib/rancher/k3s/server/manifests";
 
         # ── Apps ────────────────────────────────────────────────────
-        # cert-manager: zero required config
         cluster.apps.cert-manager.enable = true;
-
-        # ArgoCD: requires domain, CA cert, and OIDC issuer
         cluster.apps.argocd = {
           enable = true;
           domain = "argocd.example.com";
-          caCertFile = ./ca.pem;  # your CA certificate
+          caCertFile = ./ca.pem;
           oidc.issuer = "https://auth.example.com";
         };
 
+        # Fallback root filesystem — image modules override this.
+        fileSystems."/" = lib.mkOverride 1500 {
+          device = "/dev/vda1";
+          fsType = "ext4";
+        };
+
         system.stateVersion = "25.11";
+      };
+
+      baseSystem = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [ clusterConfig ];
+      };
+
+      images = openkrill.lib.buildImages {
+        inherit nixpkgs;
+        system = baseSystem;
       };
     in
     {
@@ -58,20 +69,10 @@
         ];
       };
 
-      # QCOW2 disk image
-      packages.${system}.qcow2 = (nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [
-          clusterConfig
-          "${nixpkgs}/nixos/modules/virtualisation/disk-image.nix"
-          {
-            image.baseName = "k3s-gitops";
-            image.format = "qcow2";
-            virtualisation.diskSize = 20480;
-          }
-        ];
-      }).config.system.build.image;
-
-      packages.${system}.default = self.packages.${system}.qcow2;
+      packages.${system} = {
+        qcow2   = images.qcow2.image;
+        vm      = images.vm.image;
+        default = images.qcow2.image;
+      };
     };
 }

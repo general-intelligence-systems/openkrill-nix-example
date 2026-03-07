@@ -36,6 +36,21 @@
       };
       nixosModules.default = self.nixosModules.openkrill;
 
+      # ── Library helpers ─────────────────────────────────────────
+      #
+      # buildImages — create standard image variants from a base system.
+      #
+      #   let
+      #     base = nixpkgs.lib.nixosSystem { ... };
+      #     images = openkrill.lib.buildImages { inherit nixpkgs; system = base; };
+      #   in {
+      #     packages.x86_64-linux.qcow2 = images.qcow2.image;
+      #     packages.x86_64-linux.vm    = images.vm.image;
+      #   }
+      #
+      lib.buildImages = { nixpkgs, system }:
+        import ./lib/images.nix { inherit nixpkgs system; };
+
       # ── Checks (nix flake check) ──────────────────────────────
       checks = forAllSystems (system:
         let
