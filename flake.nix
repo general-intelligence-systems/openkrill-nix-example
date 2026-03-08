@@ -144,6 +144,7 @@
       # ── Dev shell ──────────────────────────────────────────────────
       devShells.${system}.default = openkrill.devShells.${system}.default;
 
+
       # ── Image outputs ─────────────────────────────────────────────
       packages.${system} = {
         qcow2           = images.qcow2.image;
