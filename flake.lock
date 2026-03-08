@@ -87,13 +87,13 @@
       "locked": {
         "lastModified": 1772695970,
         "narHash": "sha256-ZFGgq61WPHMZcF+LWULUTIdwc/sK3IKoc8vrXHNaxWQ=",
-        "owner": "n-at-han-k",
+        "owner": "general-intelligence-systems",
         "repo": "nixhelm",
         "rev": "b3a1a90a73b0c7b8ed7dc252a82532d84bfe96d0",
         "type": "github"
       },
       "original": {
-        "owner": "n-at-han-k",
+        "owner": "general-intelligence-systems",
         "repo": "nixhelm",
         "type": "github"
       }
